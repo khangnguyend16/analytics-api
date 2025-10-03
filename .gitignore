@@ -1,0 +1,31 @@
+# Bỏ qua thư mục virtual environment
+venv/
+.venv/
+
+# Bỏ qua cache và file biên dịch Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Bỏ qua log
+*.log
+
+# Bỏ qua file config local (mỗi máy khác nhau)
+.env
+*.env
+
+# Bỏ qua file editor/IDE
+.vscode/
+.idea/
+
+# Bỏ qua hệ điều hành
+.DS_Store
+Thumbs.db
+
+# Bỏ qua các file test coverage / build
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
