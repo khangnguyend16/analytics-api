@@ -5,3 +5,5 @@ sqlmodel
 pydantic
 sqlalchemy
 timescaledb==0.0.2
+python-decouple     # python-dotenv
+psycopg[binary]     # psycopg v3
