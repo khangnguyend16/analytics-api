@@ -50,7 +50,7 @@ def read_events(
         (EventModel.user_agent.ilike("%linux%"), "Linux"),
         else_="Other",
     ).label("operating_system")
-    bucket = time_bucket(duration, EventModel.time)
+    bucket = time_bucket(duration, EventModel.time)  # time_bucket_gapfill ??
     lookup_pages = (
         pages if isinstance(pages, list) and len(pages) > 0 else DEFAULT_LOOKUP_PAGES
     )
