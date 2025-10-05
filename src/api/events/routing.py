@@ -1,28 +1,79 @@
 import os
-from fastapi import APIRouter, Depends, HTTPException
+from typing import List
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 from api.db.session import get_session
 from .models import (
     EventModel,
-    EventListSchema,
+    EventBucketSchema,
     EventCreateSchema,
-    EventUpdateSchema,
+    # EventUpdateSchema,
     get_utc_now,
 )
+from timescaledb.hyperfunctions import time_bucket
+from pprint import pprint
+from sqlalchemy import func, case
+from datetime import datetime, timedelta, timezone
+from api.db.config import DATABASE_URL
 
 router = APIRouter()
-from api.db.config import DATABASE_URL
+
+DEFAULT_LOOKUP_PAGES = [
+    "/",
+    "/about",
+    "/pricing",
+    "/contact",
+    "/blog",
+    "/products",
+    "/login",
+    "/signup",
+    "/dashboard",
+    "/settings",
+]
 
 
 # Get data here
 # List view
 # GET /api/events
-@router.get("/", response_model=EventListSchema)
-def read_events(session: Session = Depends(get_session)):
+@router.get("/", response_model=List[EventBucketSchema])
+def read_events(
+    duration: str = Query(default="1 day"),
+    pages: List = Query(default=None),
+    session: Session = Depends(get_session),
+):
     # a bunch of items in a table
-    query = select(EventModel).order_by(EventModel.updated_at.desc()).limit(10)
-    results = session.exec(query).all()  # .all() trả về list các EventModel object.
-    return {"results": results, "count": len(results)}
+    os_case = case(
+        (EventModel.user_agent.ilike("%windows%"), "Windows"),
+        (EventModel.user_agent.ilike("%macintosh%"), "MacOS"),
+        (EventModel.user_agent.ilike("%iphone%"), "iOS"),
+        (EventModel.user_agent.ilike("%android%"), "Android"),
+        (EventModel.user_agent.ilike("%linux%"), "Linux"),
+        else_="Other",
+    ).label("operating_system")
+    bucket = time_bucket(duration, EventModel.time)
+    lookup_pages = (
+        pages if isinstance(pages, list) and len(pages) > 0 else DEFAULT_LOOKUP_PAGES
+    )
+    # start = datetime.now(timezone.utc) - timedelta(hours=1)
+    # finish = datetime.now(timezone.utc) + timedelta(hours=1)
+    query = (
+        select(
+            bucket.label("bucket"),
+            os_case,
+            EventModel.page.label("page"),
+            func.avg(EventModel.duration).label("avg_duration"),
+            func.count().label("count"),
+        )
+        .where(
+            # EventModel.time > start,
+            # EventModel.time <= finish,
+            EventModel.page.in_(lookup_pages),
+        )
+        .group_by(bucket, os_case, EventModel.page)
+        .order_by(bucket, os_case, EventModel.page)
+    )
+    results = session.exec(query).fetchall()
+    return results
 
 
 # Send data here
@@ -63,40 +114,40 @@ def get_event(event_id: int, session: Session = Depends(get_session)):
     return result
 
 
-# Update this data
-# PUT /api/events/12
-@router.put("/{event_id}", response_model=EventModel)
-def update_event(
-    event_id: int, payload: EventUpdateSchema, session: Session = Depends(get_session)
-):
-    # a single row
-    query = select(EventModel).where(EventModel.id == event_id)
-    obj = session.exec(query).first()
-    if not obj:
-        raise HTTPException(status_code=404, detail="Event not found")
+# # Update this data
+# # PUT /api/events/12
+# @router.put("/{event_id}", response_model=EventModel)
+# def update_event(
+#     event_id: int, payload: EventUpdateSchema, session: Session = Depends(get_session)
+# ):
+#     # a single row
+#     query = select(EventModel).where(EventModel.id == event_id)
+#     obj = session.exec(query).first()
+#     if not obj:
+#         raise HTTPException(status_code=404, detail="Event not found")
 
-    data = payload.model_dump()  # payload -> dict (pydantic)
-    for key, value in data.items():
-        if key == "id":
-            continue
-        setattr(obj, key, value)
-    obj.updated_at = get_utc_now()
+#     data = payload.model_dump()  # payload -> dict (pydantic)
+#     for key, value in data.items():
+#         if key == "id":
+#             continue
+#         setattr(obj, key, value)
+#     obj.updated_at = get_utc_now()
 
-    session.add(obj)
-    session.commit()
-    session.refresh(obj)
-    return obj
+#     session.add(obj)
+#     session.commit()
+#     session.refresh(obj)
+#     return obj
 
 
-# # Delete this data
-# # DELETE /api/events/12
-@router.delete("/{event_id}")
-def delete_event(event_id: int, session: Session = Depends(get_session)):
-    query = select(EventModel).where(EventModel.id == event_id)
-    obj = session.exec(query).first()
-    if not obj:
-        raise HTTPException(status_code=404, detail="Event not found")
+# # # Delete this data
+# # # DELETE /api/events/12
+# @router.delete("/{event_id}")
+# def delete_event(event_id: int, session: Session = Depends(get_session)):
+#     query = select(EventModel).where(EventModel.id == event_id)
+#     obj = session.exec(query).first()
+#     if not obj:
+#         raise HTTPException(status_code=404, detail="Event not found")
 
-    session.delete(obj)
-    session.commit()
-    return {"ok": True}
+#     session.delete(obj)
+#     session.commit()
+#     return {"ok": True}
